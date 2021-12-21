@@ -1,5 +1,9 @@
 import scala.io.Source
 import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.ArrayStack
+import scala.collection.mutable.Stack
+import scala.collection.mutable.HashMap
+import java.util.Calendar
 
 object Main {
     def main(args: Array[String]): Unit = {
@@ -10,42 +14,80 @@ object Main {
 
         var polymer = start.toCharArray().toList
         
-        val rules = lines.drop(2).map(line => Rule(line(0), line(1), line(6)))
+        val rules = lines.drop(2).map(line => (line(0), line(1)) -> line(6)).toMap
 
-        val generations = (1 to 10)
+        println(s"Rules: ${rules}")
+
+        val max_generation = 20
+        val generations = (1 to max_generation)
 
         var buffer = polymer.to(ListBuffer)
 
-        for (gen <- generations) {
-            buffer = expand(buffer, rules)
-            println(s"After step ${gen} : ${buffer}")
+        var counter = new CharCounter()
+        var safeChar = polymer(0);
+        counter.count(safeChar)
+      
+        for (c <- polymer.drop(1)) {
+            
+            var levels = new Stack[(Char, Int)]()
+            levels.prepend((c, 0))
+            println(s"New round ${Calendar.getInstance().getTime()}")
+
+            while (levels.size > 0) {
+                var level = levels.head._2
+                                
+                while (level < max_generation) {
+                    val headChar = levels.head._1
+                    val matchingRuleOption = rules.get((safeChar, headChar))
+
+                    level = level + 1
+                    levels.update(0, (headChar, level))
+
+                    matchingRuleOption.foreach(newChar => levels.prepend((newChar, level)))
+                    /*
+                    levels = matchingRuleOption match {                           
+                        case Some(newChar) => { 
+                            levels.prepend((newChar, level))
+                            levels
+                        }
+                        case None => { 
+                            levels
+                        }
+                    }
+                    */
+                }
+                
+                // level == 40
+                safeChar = levels.pop()._1
+                counter.count(safeChar)                           
+            }
         }
-        
-        val elementCount = buffer.groupBy(identity).mapValues(_.size)
 
-        val maxElem = elementCount.maxBy(_._2)
-        val minElem = elementCount.minBy(_._2)
-
-        println(s"Finished: max ${maxElem}, min ${minElem} => ${maxElem._2 - minElem._2}")
+        counter.print();
     }
 
-    def expand(polymer: ListBuffer[Char], rules: List[Rule]): ListBuffer[Char] = {
-        var collected = new ListBuffer[Char]()
+    class CharCounter {
+        var counter: HashMap[Char, Long] = new HashMap()
+        var num: Long = 0
 
-        val indices = (0 to polymer.size - 2)
-        for (index <- indices) {
-            val charOne = polymer(index)
-            val charTwo = polymer(index + 1)
-            val matchingRuleOption = rules find (r => r.charOne == charOne && r.charTwo == charTwo)
+        def count(c: Char): Unit = {
+            if (this.counter.contains(c)) {
+                val oldValue = this.counter(c);
+                this.counter(c) = oldValue + 1
+            } else {
+                this.counter += (c -> 1)
+            }
 
-            collected += charOne
-            matchingRuleOption.foreach(rule => collected += rule.charToInsert)
+            num = num + 1
+            if (num % 10000000 == 0)
+                println(s"<${num} counted>");
         }
 
-        collected += polymer.last
-        collected
-    }
+        def print(): Unit = {
+            val minItem = counter.minBy(_._2);
+            val maxItem = counter.maxBy(_._2);
 
-    case class Rule(charOne: Char, charTwo: Char, charToInsert: Char) {
+            println(s"Counter: ${counter}, min ${minItem}, max ${maxItem}, res = ${maxItem._2 - minItem._2}")
+        }
     }
 }
