@@ -4,6 +4,7 @@ import scala.collection.mutable.ArrayStack
 import scala.collection.mutable.Stack
 import scala.collection.mutable.HashMap
 import java.util.Calendar
+import scala.runtime.LongRef
 
 object Main {
     def main(args: Array[String]): Unit = {
@@ -12,17 +13,15 @@ object Main {
 
         val start = lines(0)
 
-        var polymer = start.toCharArray().toList
-        
+        val polymer = start.toCharArray().toList
         val rules = lines.drop(2).map(line => (line(0), line(1)) -> line(6)).toMap
+        val max_generation = 10
+        val cache_level = 4
+        
+        countPolymer(polymer, max_generation, cache_level, rules).print();
+    }
 
-        println(s"Rules: ${rules}")
-
-        val max_generation = 20
-        val generations = (1 to max_generation)
-
-        var buffer = polymer.to(ListBuffer)
-
+    def countPolymer(polymer: List[Char], maxGeneration: Int, cacheLevel: Int, rules: Map[(Char, Char), Char]): CharCounter = {
         var counter = new CharCounter()
         var safeChar = polymer(0);
         counter.count(safeChar)
@@ -36,51 +35,56 @@ object Main {
             while (levels.size > 0) {
                 var level = levels.head._2
                                 
-                while (level < max_generation) {
+                while (level < maxGeneration) {
                     val headChar = levels.head._1
-                    val matchingRuleOption = rules.get((safeChar, headChar))
 
                     level = level + 1
                     levels.update(0, (headChar, level))
 
-                    matchingRuleOption.foreach(newChar => levels.prepend((newChar, level)))
-                    /*
-                    levels = matchingRuleOption match {                           
-                        case Some(newChar) => { 
-                            levels.prepend((newChar, level))
-                            levels
-                        }
-                        case None => { 
-                            levels
-                        }
+                    val remaining = maxGeneration - level
+
+                    if (remaining == cacheLevel) {
+                        // Use cache
                     }
-                    */
+
+                    val matchResult = rules.get((safeChar, headChar))
+                    matchResult.foreach(newChar => levels.prepend((newChar, level)))
                 }
                 
-                // level == 40
+                // level == max_generation
                 safeChar = levels.pop()._1
                 counter.count(safeChar)                           
             }
         }
 
-        counter.print();
+        counter
     }
 
     class CharCounter {
         var counter: HashMap[Char, Long] = new HashMap()
-        var num: Long = 0
-
+        
         def count(c: Char): Unit = {
+            upsert(c, v => v + 1)
+        }
+
+        def uncount(c: Char): Unit = {            
+            upsert(c, v => v - 1)
+        }
+
+        def upsert(c: Char, update: Long => Long) {
             if (this.counter.contains(c)) {
                 val oldValue = this.counter(c);
-                this.counter(c) = oldValue + 1
+                this.counter(c) = update(oldValue)
             } else {
-                this.counter += (c -> 1)
+                val oldValue = 0
+                this.counter += (c -> update(oldValue))
             }
+        }
 
-            num = num + 1
-            if (num % 10000000 == 0)
-                println(s"<${num} counted>");
+        def addCounter(other: CharCounter) {
+            for (kv <- other.counter) {
+                upsert(kv._1, v => v + kv._2)
+            }
         }
 
         def print(): Unit = {
